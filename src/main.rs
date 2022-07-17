@@ -1,30 +1,42 @@
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
+use chumsky::prelude::*;
 
-use pest::Parser;
+#[derive(Debug)]
+enum Delim {
+    Paren,
+    Block,
+}
 
-#[derive(Parser)]
-#[grammar = "ident.pest"]
-struct IdentParser;
+#[derive(Debug)]
+enum Token {
+    Int(u64),
+    Ident(String),
+    Op(String),
+    Tree(Delim, Vec<Token>),
+}
+
+// A parser that turns pythonic code with semantic whitespace into a token tree
+fn lexer() -> impl Parser<char, Vec<Token>, Error = Simple<char>> {
+    let int = text::int(10).from_str().unwrapped().map(Token::Int);
+
+    let ident = text::ident().map(Token::Ident);
+
+    let op = one_of("=.:%,")
+        .repeated()
+        .at_least(1)
+        .collect()
+        .map(Token::Op);
+
+    let tt = recursive(|tt| {
+        let tt_list = tt.padded().repeated();
+
+        int.or(op).or(ident).or(tt_list
+            .delimited_by(just('('), just(')'))
+            .map(|tts| Token::Tree(Delim::Paren, tts)))
+    });
+    text::ident(tt, |tts| Token::Tree(Delim::Block, tts)).then_ignore(end())
+    // text::semantic_indentation(tt, |tts| Token::Tree(Delim::Block, tts)).then_ignore(end())
+}
 
 fn main() {
-let pairs = IdentParser::parse(Rule::ident_list, "a1 b2").unwrap_or_else(|e| panic!("{}", e));
-
-    // Because ident_list is silent, the iterator will contain idents
-    for pair in pairs {
-        // A pair is a combination of the rule which matched and a span of input
-        println!("Rule:    {:?}", pair.as_rule());
-        println!("Span:    {:?}", pair.as_span());
-        println!("Text:    {}", pair.as_str());
-
-        // A pair can be converted to an iterator of the tokens which make it up:
-        for inner_pair in pair.into_inner() {
-            match inner_pair.as_rule() {
-                Rule::alpha => println!("Letter:  {}", inner_pair.as_str()),
-                Rule::digit => println!("Digit:   {}", inner_pair.as_str()),
-                _ => unreachable!()
-            };
-        }
-    }
+    println!("{:#?}", lexer().parse(include_str!("sample.py")));
 }

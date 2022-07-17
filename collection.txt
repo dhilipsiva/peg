@@ -1,3 +1,4 @@
+READ Rust first
 
 https://github.com/jonhoo/fantoccini
 https://github.com/stevepryde/thirtyfour
